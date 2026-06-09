@@ -35,7 +35,7 @@ services:
       dockerfile: docker/Dockerfile.frontend
     container_name: rag-frontend
     ports:
-      - "3101:80"
+      - "3106:80"
     depends_on:
       - backend
     restart: unless-stopped
