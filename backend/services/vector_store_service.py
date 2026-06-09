@@ -33,7 +33,8 @@ class VectorStoreService:
     # Collection lifecycle
     # ------------------------------------------------------------------
     async def ensure_collection(self):
-        existing = {c.name for c in await self.client.get_collections()}
+        response = await self.client.get_collections()
+        existing = {c.name for c in response.collections}
         if self.collection not in existing:
             await self.client.create_collection(
                 collection_name=self.collection,
