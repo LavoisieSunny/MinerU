@@ -64,7 +64,7 @@ class VectorStoreService:
 
         points = [
             PointStruct(
-                id=str(uuid.uuid4()),
+                id=uuid.uuid4(),
                 vector=emb,
                 payload={
                     "doc_id": doc_id,
