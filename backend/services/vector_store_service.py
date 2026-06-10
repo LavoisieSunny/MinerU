@@ -113,10 +113,18 @@ class VectorStoreService:
             collection_name=self.collection,
             query_vector=query_vector,
             limit=top_k,
-            score_threshold=score_threshold,
             query_filter=query_filter,
             with_payload=True,
         )
+
+        if results:
+            best_score = results[0].score
+            logger.info(f"Qdrant search: best_score={best_score:.3f}, threshold={score_threshold}")
+            if best_score < score_threshold:
+                logger.warning(
+                    f"Best score {best_score:.3f} is below threshold {score_threshold} — "
+                    "returning results anyway. Consider lowering similarity_threshold in config."
+                )
 
         return [
             {
