@@ -4,6 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ git libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt .
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 RUN mkdir -p data/uploads data/mineru_output logs
