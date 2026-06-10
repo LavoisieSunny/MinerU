@@ -87,29 +87,62 @@ class RAGPipeline:
           2. Retrieve top-k chunks from Qdrant
           3. Build prompt and call LLM
         """
-        logger.info(f"RAG query: '{question[:80]}...' | doc_id={doc_id}")
+        logger.info(f"RAG query: '{question[:80]}' | doc_id={doc_id}")
 
         # 1. Embed
         query_vector = await self.embedder.embed(question)
+        logger.info(f"RAG query: embedding dimension = {len(query_vector)}")
 
-        # 2. Retrieve
-        chunks = await self.vector_store.search(
+        # 2. Retrieve — first try WITHOUT score threshold to diagnose
+        all_chunks = await self.vector_store.search(
             query_vector=query_vector,
             top_k=settings.top_k_results,
-            score_threshold=settings.similarity_threshold,
+            score_threshold=0.0,          # <-- get everything, no filter
             doc_id=doc_id,
         )
 
+        logger.info(
+            f"RAG query: {len(all_chunks)} chunks returned. "
+            f"Scores: {[round(c['score'], 3) for c in all_chunks[:5]]}"
+        )
+
+        # Now apply threshold as a soft filter
+        chunks = [c for c in all_chunks if c["score"] >= settings.similarity_threshold]
+
         if not chunks:
-            no_context_msg = (
-                "I couldn't find relevant context in the indexed documents "
-                "to answer your question."
-            )
-            if stream:
-                async def _empty():
-                    yield no_context_msg
-                return _empty()
-            return {"answer": no_context_msg, "sources": [], "chunks_used": 0}
+            if all_chunks:
+                # We GOT results but they're below threshold — that's the bug
+                best = all_chunks[0]["score"]
+                logger.warning(
+                    f"Threshold {settings.similarity_threshold} filtered out all chunks. "
+                    f"Best score was {best:.3f}. Lowering threshold in config will fix this."
+                )
+                # Fallback: use top results anyway if they're at least somewhat relevant
+                if best > 0.2:
+                    logger.info("Using top chunks despite low score (fallback mode)")
+                    chunks = all_chunks
+                else:
+                    no_context_msg = (
+                        "I couldn't find relevant context in the indexed documents "
+                        "to answer your question."
+                    )
+            else:
+                # Zero results — doc_id mismatch or empty collection
+                logger.error(
+                    f"Zero results from Qdrant for doc_id={doc_id}. "
+                    "Check: (1) document was ingested, (2) doc_id matches stored value."
+                )
+                no_context_msg = (
+                    "I couldn't find relevant context in the indexed documents "
+                    "to answer your question."
+                )
+
+            if not chunks:
+                if stream:
+                    async def _empty():
+                        yield no_context_msg
+                    return _empty()
+                return {"answer": no_context_msg, "sources": [], "chunks_used": 0}
 
         # 3. LLM
         prompt = build_rag_prompt(question, chunks)
