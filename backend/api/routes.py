@@ -95,3 +95,23 @@ async def chat_stream(request: ChatRequest):
         return StreamingResponse(event_generator(), media_type="text/event-stream")
     except Exception as exc:
         raise HTTPException(500, str(exc))
+
+
+@router.get("/documents/{doc_id}/chunks", tags=["debug"])
+async def get_chunks(doc_id: str, limit: int = 10):
+    """See exactly what text was indexed for a document."""
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    from qdrant_client import AsyncQdrantClient
+    
+    client = AsyncQdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+    records, _ = await client.scroll(
+        collection_name=settings.qdrant_collection_name,
+        scroll_filter=Filter(
+            must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
+        ),
+        limit=limit,
+        with_payload=True,
+        with_vectors=False,
+    )
+    return [{"chunk_index": r.payload.get("chunk_index"), "text": r.payload.get("text", "")[:300]} for r in records]
+
