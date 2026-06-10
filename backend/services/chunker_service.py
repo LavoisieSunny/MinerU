@@ -57,12 +57,20 @@ class ChunkerService:
         """Split on blank lines; keep markdown headings as their own paragraph."""
         parts = re.split(r"\n{2,}", text)
         result: list[str] = []
+
         for p in parts:
+            p = p.strip()
+            if not p:
+                continue
+
+            # Skip pure page-number lines like "## Page 3" with no content after
+            if re.fullmatch(r"##\s*Page\s*\d+", p):
+                continue
+
             # Headings always start a new chunk
             if p.startswith("#"):
                 result.append(p)
             elif len(p) > 1000:
-                # Long paragraphs: split on sentence boundaries
                 sentences = re.split(r"(?<=[.!?])\s+", p)
                 buf = ""
                 for s in sentences:
@@ -76,6 +84,7 @@ class ChunkerService:
                     result.append(buf)
             else:
                 result.append(p)
+
         return result
 
     @staticmethod

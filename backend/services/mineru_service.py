@@ -75,6 +75,7 @@ class MinerUService:
 
             md_path = doc_output_dir / md_filename
             markdown_text = md_path.read_text(encoding="utf-8")
+            logger.info(f"MinerU: first 500 chars of extracted text:\n{markdown_text[:500]}")
 
             # Collect extracted image paths
             images_dir = doc_output_dir / "images"
@@ -114,24 +115,46 @@ class MinerUService:
                 raise RuntimeError(f"Parsing failed: MinerU error: {exc} | PyMuPDF error: {fallback_exc}") from fallback_exc
 
     def _parse_pdf_fallback(self, file_path: Path, doc_output_dir: Path) -> dict[str, Any]:
-        """Fallback PDF parser using PyMuPDF (fitz) when MinerU is unavailable or fails."""
+        """Fallback PDF parser using PyMuPDF with better text extraction."""
         logger.info(f"Using PyMuPDF parsing for {file_path.name}")
         try:
             import fitz
             doc = fitz.open(file_path)
             markdown_parts = []
-            
+
             for page_num, page in enumerate(doc, 1):
-                text = page.get_text()
-                markdown_parts.append(f"## Page {page_num}\n\n{text}")
-                
+                # Use "blocks" mode — preserves reading order better than raw get_text()
+                blocks = page.get_text("blocks", sort=True)  # sort=True fixes reading order
+                page_lines = []
+
+                for block in blocks:
+                    # block = (x0, y0, x1, y1, text, block_no, block_type)
+                    if block[6] == 0:  # type 0 = text block (skip images=1)
+                        text = block[4].strip()
+                        if text:
+                            page_lines.append(text)
+
+                if page_lines:
+                    page_text = "\n\n".join(page_lines)
+                    markdown_parts.append(f"## Page {page_num}\n\n{page_text}")
+                else:
+                    logger.warning(f"Page {page_num} has no extractable text — may be scanned/image-based")
+
             markdown_text = "\n\n".join(markdown_parts)
+
+            # Warn if extraction looks empty or too short
+            total_chars = len(markdown_text.replace(" ", "").replace("\n", ""))
+            avg_chars_per_page = total_chars / max(len(doc), 1)
+            if avg_chars_per_page < 50:
+                logger.warning(
+                    f"Very low text density ({avg_chars_per_page:.0f} chars/page). "
+                    "PDF may be scanned. MinerU OCR mode is needed for accurate results."
+                )
+
             page_count = len(doc)
-            
-            md_filename = f"{file_path.stem}.md"
-            md_path = doc_output_dir / md_filename
+            md_path = doc_output_dir / f"{file_path.stem}.md"
             md_path.write_text(markdown_text, encoding="utf-8")
-            
+
             return {
                 "markdown": markdown_text,
                 "pages": page_count,
