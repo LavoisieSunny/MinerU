@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 64
     top_k_results: int = 5
-    similarity_threshold: float = 0.5
+    similarity_threshold: float = 0.3
+
 
     class Config:
         env_file = ".env"

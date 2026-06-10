@@ -1,6 +1,4 @@
-"""
-Embedding service backed by Ollama (nomic-embed-text or any embed model).
-"""
+import asyncio
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -26,14 +24,19 @@ class EmbeddingService:
         return embedding
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Embed a batch of strings sequentially (Ollama has no batch endpoint)."""
-        embeddings = []
-        for i, text in enumerate(texts):
-            vec = await self.embed(text)
-            embeddings.append(vec)
-            if (i + 1) % 10 == 0:
-                logger.debug(f"Embedded {i+1}/{len(texts)} chunks")
-        return embeddings
+        """Embed a batch of strings concurrently using asyncio.gather."""
+        # Limit concurrency to 10 parallel requests to not overwhelm Ollama
+        semaphore = asyncio.Semaphore(10)
+
+        async def sem_embed(text: str) -> list[float]:
+            async with semaphore:
+                return await self.embed(text)
+
+        logger.info(f"Embedding {len(texts)} chunks in parallel...")
+        embeddings = await asyncio.gather(*(sem_embed(text) for text in texts))
+        logger.info("Finished embedding all chunks.")
+        return list(embeddings)
 
     async def close(self):
         await self._client.aclose()
+
