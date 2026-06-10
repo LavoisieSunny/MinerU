@@ -22,11 +22,13 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - MINERU_MODEL_SOURCE=modelscope
     volumes:
       - ../backend/data:/app/data
       - ../backend/logs:/app/logs
       - ../models:/models
       - ./magic-pdf.json:/root/magic-pdf.json
+      - mineru_models:/root/.cache
     depends_on:
       - qdrant
     extra_hosts:
@@ -46,4 +48,5 @@ services:
 
 volumes:
   qdrant_data:
+  mineru_models:
 
